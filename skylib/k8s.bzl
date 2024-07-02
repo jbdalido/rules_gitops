@@ -124,6 +124,7 @@ def k8s_deploy(
         patches = None,
         image_name_patches = {},
         image_tag_patches = {},
+        server_side_apply = False,
         substitutions = {},  # dict of template parameter substitutions. CLUSTER and NAMESPACE parameters are added automatically.
         configurations = [],  # additional kustomize configuration files. rules_gitops provides
         common_labels = {},  # list of common labels to apply to all objects see commonLabels kustomize docs
@@ -207,6 +208,7 @@ def k8s_deploy(
             name = name + ".apply",
             srcs = [name],
             cluster = cluster,
+            server_side_apply = server_side_apply,
             user = user,
             namespace = namespace,
             tags = tags,
@@ -271,6 +273,7 @@ def k8s_deploy(
         kubectl(
             name = name + ".apply",
             srcs = [name],
+            server_side_apply = server_side_apply,
             cluster = cluster,
             user = user,
             namespace = namespace,

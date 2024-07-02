@@ -511,6 +511,9 @@ def _kubectl_impl(ctx):
     kubectl_command_arg = ctx.attr.command
     kubectl_command_arg = ctx.expand_make_variables("kubectl_command", kubectl_command_arg, {})
 
+    if ctx.attr.server_side_apply:
+        kubectl_command_arg += " --server-side"
+
     files += [ctx.executable._template_engine, ctx.file._info_file]
 
     if ctx.attr.push:
@@ -564,6 +567,7 @@ kubectl = rule(
         "cluster": attr.string(mandatory = True),
         "namespace": attr.string(mandatory = True),
         "command": attr.string(default = "apply"),
+        "server_side_apply": attr.bool(default = False),
         "user": attr.string(),
         "push": attr.bool(default = True),
         "_build_user_value": attr.label(
