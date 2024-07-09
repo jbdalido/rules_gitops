@@ -71,16 +71,27 @@ set -euo pipefail
 {kustomize} build --load-restrictor LoadRestrictionsNone --reorder legacy {kustomize_dir} {template_part} {resolver_part} >{out}
 """
 
+_ns_yaml = """\
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {namespace}
+"""
+
 def _kustomize_impl(ctx):
     kustomize_bin = ctx.toolchains["@rules_gitops//gitops:kustomize_toolchain_type"].kustomizeinfo.bin
     kustomization_yaml_file = ctx.actions.declare_file(ctx.attr.name + "/kustomization.yaml")
+    namespace_yaml_file = ctx.actions.declare_file(ctx.attr.name + "/ns.yaml")
     root = kustomization_yaml_file.dirname
-
+    ctx.actions.write(namespace_yaml_file, _ns_yaml.format(
+        namespace = ctx.attr.namespace,
+    ))
     upupup = "/".join([".."] * (root.count("/") + 1))
     use_stamp = False
     tmpfiles = []
     kustomization_yaml = "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\n"
     kustomization_yaml += "resources:\n"
+    kustomization_yaml += "- {}/{}\n".format(upupup, namespace_yaml_file.path)
     for _, f in enumerate(ctx.files.manifests):
         kustomization_yaml += "- {}/{}\n".format(upupup, f.path)
 
@@ -253,10 +264,10 @@ def _kustomize_impl(ctx):
         out = ctx.outputs.yaml.path,
     )
     ctx.actions.write(script, script_content, is_executable = True)
-
+    
     ctx.actions.run(
         outputs = [ctx.outputs.yaml],
-        inputs = ctx.files.manifests + ctx.files.configmaps_srcs + ctx.files.secrets_srcs + ctx.files.configurations + ctx.files.openapi_path + [kustomization_yaml_file] + tmpfiles + ctx.files.patches + ctx.files.deps,
+        inputs = depset([namespace_yaml_file] + ctx.files.manifests + ctx.files.configmaps_srcs + ctx.files.secrets_srcs + ctx.files.configurations + ctx.files.openapi_path + [kustomization_yaml_file] + tmpfiles + ctx.files.patches + ctx.files.deps ),
         executable = script,
         mnemonic = "Kustomize",
         tools = [kustomize_bin],
@@ -283,6 +294,7 @@ def _kustomize_impl(ctx):
                 ctx.attr.images,
                 transitive = transitive_image_pushes,
             ),
+            namespace = ctx.attr.namespace,
         ),
     ]
 
@@ -305,7 +317,7 @@ kustomize = rule(
         "image_tag_patches": attr.string_dict(default = {}, doc = "set new tags for selected images"),
         "start_tag": attr.string(default = "{{"),
         "substitutions": attr.string_dict(default = {}),
-        "deps": attr.label_list(default = [], allow_files = True),
+        "deps": attr.label_list(allow_files = True),
         "configurations": attr.label_list(allow_files = True),
         "common_labels": attr.string_dict(default = {}),
         "common_annotations": attr.string_dict(default = {}),
@@ -458,6 +470,7 @@ fi
         GitopsArtifactsInfo(
             image_pushes = depset(transitive = [obj[GitopsArtifactsInfo].image_pushes for obj in ctx.attr.srcs]),
             deployment_branch = ctx.attr.deployment_branch,
+            namespace = ctx.attr.namespace,
         ),
     ]
 
@@ -535,7 +548,9 @@ def _kubectl_impl(ctx):
 
     namespace = ctx.attr.namespace
     for inattr in ctx.attr.srcs:
+        statements += "# " + inattr[GitopsArtifactsInfo].namespace + "\n"
         for infile in inattr.files.to_list():
+            
             statements += "{template_engine} --template={infile} --variable=NAMESPACE={namespace} --stamp_info_file={info_file} | kubectl --cluster=\"$CLUSTER\" --user=\"$USER\" {kubectl_command} -f -\n".format(
                 infile = infile.short_path,
                 kubectl_command = kubectl_command_arg,
@@ -543,6 +558,12 @@ def _kubectl_impl(ctx):
                 namespace = namespace,
                 info_file = ctx.file._info_file.short_path,
             )
+            if ctx.attr.wait:
+                statements += "kubectl rollout status -w deployment -n {namespace}\n".format(
+                    namespace = namespace,
+                )
+                print(statements)
+
 
     ctx.actions.expand_template(
         template = ctx.file._template,
@@ -569,6 +590,7 @@ kubectl = rule(
         "command": attr.string(default = "apply"),
         "server_side_apply": attr.bool(default = False),
         "user": attr.string(),
+        "wait": attr.bool(default = False),
         "push": attr.bool(default = True),
         "_build_user_value": attr.label(
             default = Label("//skylib:build_user_value.txt"),

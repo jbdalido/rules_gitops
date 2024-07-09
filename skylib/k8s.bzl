@@ -137,14 +137,15 @@ def k8s_deploy(
         image_registry = "docker.io",  # registry to push container to. jenkins will need an access configured for gitops to work. Ignored for mynamespace.
         image_repository = None,  # repository (registry path) to push container to. Generated from the image bazel path if empty.
         objects = [],
-        gitops = True,  # make sure to use gitops = False to work with individual namespace. This option will be turned False if namespace is '{BUILD_USER}'
+        gitops = False,  # make sure to use gitops = False to work with individual namespace. This option will be turned False if namespace is '{BUILD_USER}'
         gitops_path = "cloud",
         deployment_branch = None,
         release_branch_prefix = "main",
         start_tag = "{{",
         end_tag = "}}",
         tags = [],  # tags to add to all generated rules.
-        visibility = None):
+        visibility = None,
+        wait = False):
     """ k8s_deploy
     """
 
@@ -213,6 +214,7 @@ def k8s_deploy(
             namespace = namespace,
             tags = tags,
             visibility = visibility,
+            wait = wait,
         )
         kubectl(
             name = name + ".delete",

@@ -16,6 +16,7 @@ GitopsArtifactsInfo = provider(
     fields = {
         "image_pushes": "List of of executable targets required to be executed before deployment, typically pushes images to a registry.",
         "deployment_branch": "Branch to merge manifests into and create a PR from.",
+        "namespace": "namespace to deploy those manifests"
     },
 )
 
